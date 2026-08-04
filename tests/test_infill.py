@@ -19,6 +19,14 @@ def _uniform_profile(radius: float = 10.0, steps: int = 90) -> RadialProfile:
     return RadialProfile(z=1.0, thetas=thetas, radii=radii, center=(0.0, 0.0))
 
 
+def _square_profile(half: float = 10.0, steps: int = 180) -> RadialProfile:
+    """Radial profile of an axis-aligned square (distance to its edge)."""
+    thetas = np.linspace(-np.pi, np.pi, steps, endpoint=False)
+    # Distance from centre to the square boundary along each ray.
+    radii = half / np.maximum(np.abs(np.cos(thetas)), np.abs(np.sin(thetas)))
+    return RadialProfile(z=1.0, thetas=thetas, radii=radii, center=(0.0, 0.0))
+
+
 # --- factory --------------------------------------------------------------
 
 def test_factory_selects_by_config():
@@ -146,6 +154,49 @@ def test_grid_denser_infill_more_spokes():
     dense_spokes = len([p for p in dense if not p.closed])
     sparse_spokes = len([p for p in sparse if not p.closed])
     assert dense_spokes > sparse_spokes
+
+
+def _max_edge(path) -> float:
+    """Longest Cartesian edge of a path, including the closing edge if closed."""
+    xy = np.array(
+        [[pt.r * np.cos(pt.theta), pt.r * np.sin(pt.theta)] for pt in path.points]
+    )
+    edges = list(np.hypot(*np.diff(xy, axis=0).T))
+    if path.closed:
+        edges.append(float(np.hypot(*(xy[0] - xy[-1]))))
+    return max(edges) if edges else 0.0
+
+
+def test_grid_rings_never_bowtie_on_noncircular_section():
+    """A ring larger than the inscribed circle must split into arcs, not stitch
+    disjoint angular sectors into one self-crossing loop (the "bowtie" bug)."""
+    profile = _square_profile(half=10.0)
+    config = SlicerConfig(
+        infill_type=InfillType.GRID, infill_percentage=25.0,
+        wall_thickness=1.2, perimeters=0,
+    )
+    rings_and_arcs = [
+        p for p in GridInfill().generate(profile, config) if len(p.points) > 2
+    ]
+    assert rings_and_arcs
+    # Neighbouring angular samples sit < ~1 mm apart on this section; a bowtie
+    # produces an edge spanning the whole part (tens of mm).
+    assert all(_max_edge(p) < 2.0 for p in rings_and_arcs)
+
+
+def test_grid_closed_rings_are_full_circles():
+    """Only rings reaching every angle stay closed; partial ones are open arcs."""
+    profile = _square_profile(half=10.0)
+    config = SlicerConfig(
+        infill_type=InfillType.GRID, infill_percentage=25.0,
+        wall_thickness=1.2, perimeters=0,
+    )
+    closed = [p for p in GridInfill().generate(profile, config) if p.closed]
+    # A closed ring on a square fits inside the inscribed circle: constant radius.
+    for ring in closed:
+        radii = [pt.r for pt in ring.points]
+        assert max(radii) - min(radii) < 1e-9
+        assert max(radii) <= 10.0 + 1e-9  # within the inscribed circle
 
 
 def test_grid_zero_percent_is_empty():

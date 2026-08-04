@@ -61,20 +61,56 @@ class GridInfill(InfillStrategy):
     ) -> list[ToolPath]:
         # Wider spacing for sparser infill; one extrusion width at 100 %.
         step = config.extrusion_width / density
+        thetas = profile.thetas
+        n = thetas.size
         paths: list[ToolPath] = []
         radius = boundary
         while radius > 0.0:
+            # A concentric circle of this radius only stays inside the part
+            # where the interior reaches out that far. Where it does not, the
+            # circle must be cut: the surviving angles form one or more
+            # *contiguous* arcs, never a single loop stitched across the gaps
+            # (that would draw a bowtie hopping between disjoint sectors).
             mask = interior >= radius
-            if mask.sum() >= 3:
+            if int(mask.sum()) == n:
+                # Reaches every angle: a full, closed concentric ring.
                 points = [
                     PolarPoint(r=radius, theta=float(t), z=profile.z)
-                    for t in profile.thetas[mask]
+                    for t in thetas
                 ]
                 paths.append(
                     ToolPath(role=PathRole.INFILL, points=points, closed=True)
                 )
+            else:
+                for run in GridInfill._contiguous_runs(mask):
+                    if len(run) < 2:
+                        continue  # a lone point is not an extrudable arc
+                    points = [
+                        PolarPoint(r=radius, theta=float(thetas[i]), z=profile.z)
+                        for i in run
+                    ]
+                    paths.append(
+                        ToolPath(role=PathRole.INFILL, points=points, closed=False)
+                    )
             radius -= step
         return paths
+
+    @staticmethod
+    def _contiguous_runs(mask: np.ndarray) -> list[list[int]]:
+        """Indices of ``mask`` grouped into runs contiguous on the circle.
+
+        ``thetas`` wrap, so a run straddling the ``+pi``/``-pi`` seam (both the
+        first and last samples set) is merged into one arc.
+        """
+        idx = np.nonzero(mask)[0]
+        if idx.size == 0:
+            return []
+        breaks = np.nonzero(np.diff(idx) > 1)[0]
+        runs = [list(r) for r in np.split(idx, breaks + 1)]
+        if len(runs) > 1 and mask[0] and mask[-1]:
+            # Join the seam: the trailing run continues into the leading one.
+            runs[0] = runs.pop() + runs[0]
+        return runs
 
     # Coarsest generation: the principal axes (0, pi/2, pi, 3pi/2). Every finer
     # generation doubles this by inserting the bisectors.
