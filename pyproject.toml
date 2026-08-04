@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "polar-slicer"
+version = "0.1.0"
+description = "A modular 3D slicer for rotative printing: STL -> polar (R, theta, Z) G-code."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+polar-slicer = "polar_slicer.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["polar_slicer*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
