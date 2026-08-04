@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from polar_slicer.config import InfillType, SlicerConfig
 from polar_slicer.geometry.profile import RadialProfile
@@ -93,6 +94,58 @@ def test_grid_density_controls_ring_spacing():
     dense_rings = len([p for p in dense if p.closed])
     sparse_rings = len([p for p in sparse if p.closed])
     assert dense_rings > sparse_rings
+
+
+def test_grid_spokes_avoid_center():
+    profile = _uniform_profile(radius=10.0)
+    width = 0.4
+    config = SlicerConfig(
+        infill_type=InfillType.GRID, infill_percentage=80.0,
+        wall_thickness=2.0, perimeters=0, extrusion_width=width,
+    )
+    spokes = [p for p in GridInfill().generate(profile, config) if not p.closed]
+    assert spokes
+    # No ray reaches the axis; the innermost stop is the floor R0 = d/2.
+    assert all(len(s) == 2 for s in spokes)
+    inner = [min(pt.r for pt in s.points) for s in spokes]
+    assert min(inner) >= width / 2.0 - 1e-9
+    # Every ray stays inside the interior boundary (10 - 2 = 8).
+    assert max(pt.r for s in spokes for pt in s.points) <= 8.0 + 1e-9
+
+
+def test_grid_spoke_stop_radius_grows_with_count():
+    profile = _uniform_profile(radius=10.0)
+    width = 0.4
+    config = SlicerConfig(
+        infill_type=InfillType.GRID, infill_percentage=100.0,
+        wall_thickness=2.0, perimeters=0, extrusion_width=width,
+    )
+    spokes = [p for p in GridInfill().generate(profile, config) if not p.closed]
+    stops = sorted({round(min(pt.r for pt in s.points), 6) for s in spokes})
+    # Hierarchical field: several distinct butée radii, not one uniform hole.
+    assert len(stops) >= 3
+    # The coarsest (4 principal axes) reach the innermost chord radius
+    # d/(2*sin(pi/4)); finer generations stop strictly farther out.
+    coarsest = width / (2.0 * np.sin(np.pi / 4.0))
+    assert stops[0] == pytest.approx(coarsest, abs=1e-6)
+    assert stops[1] > stops[0]
+
+
+def test_grid_denser_infill_more_spokes():
+    profile = _uniform_profile(radius=10.0)
+    dense = GridInfill().generate(
+        profile,
+        SlicerConfig(infill_type=InfillType.GRID, infill_percentage=100.0,
+                     wall_thickness=2.0, perimeters=0),
+    )
+    sparse = GridInfill().generate(
+        profile,
+        SlicerConfig(infill_type=InfillType.GRID, infill_percentage=20.0,
+                     wall_thickness=2.0, perimeters=0),
+    )
+    dense_spokes = len([p for p in dense if not p.closed])
+    sparse_spokes = len([p for p in sparse if not p.closed])
+    assert dense_spokes > sparse_spokes
 
 
 def test_grid_zero_percent_is_empty():
