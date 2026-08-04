@@ -56,8 +56,14 @@ polar_slicer/
     path.py            ToolPath, PathRole
   export/
     exporter.py        GCodeExporter → PolarGCodeExporter
+  gcode_reader.py      PolarGCodeReader (G-code → Cartesian layers, for the viewer)
   pipeline.py          SlicerPipeline — orchestrator (all collaborators injected)
   __main__.py          composition root + CLI (the only place concretes are built)
+
+webapp/                browser front-end (Flask)
+  server.py            create_app + /api/slice (STL upload → gcode + layer JSON)
+  __main__.py          `python -m webapp` launcher (opens the browser)
+  static/              index.html, app.js, style.css (canvas layer viewer)
 ```
 
 **How SOLID maps here**
@@ -79,9 +85,32 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-## Usage
+## Web app (easiest)
 
-Command line:
+A small browser UI lets you load an STL, slice it with your parameters, and step
+through the result layer by layer.
+
+```bash
+pip install -e ".[web]"     # or: pip install flask
+python -m webapp            # starts a local server and opens your browser
+```
+
+Then, in the page:
+
+1. **Choose an STL file** and set the parameters (layer height, perimeters, wall
+   thickness, infill % and type, angular steps).
+2. Click **Slice** — the model is converted to polar G-code on the server.
+3. **Preview by layer** with the slider / play button; toggle *ghost* to see the
+   layers below. Click **Download G-code** to save the result.
+
+Extrusions are drawn in blue (perimeters) and orange (infill); travel moves are
+faint. The preview renders the *actual generated G-code* (parsed back via
+`polar_slicer.gcode_reader.PolarGCodeReader`), so it reflects exactly what the
+file contains.
+
+Options: `python -m webapp --port 8000 --no-browser`.
+
+## Usage (command line)
 
 ```bash
 # Generate a demo cylinder STL

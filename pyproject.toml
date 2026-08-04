@@ -13,12 +13,19 @@ dependencies = ["numpy>=1.24"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
+web = ["flask>=3"]
 
 [project.scripts]
 polar-slicer = "polar_slicer.__main__:main"
 
+[project.gui-scripts]
+polar-slicer-web = "webapp.__main__:main"
+
 [tool.setuptools.packages.find]
-include = ["polar_slicer*"]
+include = ["polar_slicer*", "webapp*"]
+
+[tool.setuptools.package-data]
+webapp = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
