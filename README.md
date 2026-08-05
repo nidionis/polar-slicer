@@ -1,6 +1,6 @@
 # polar-slicer
 
-/!\ NOT WORKIN ! (prototyping)
+/!\ NOT WORKING YET ! (prototyping)
 
 A modular 3D-printing slicer for **rotative** printing. It converts an STL mesh
 into **polar** toolpaths `(R, θ, Z)` and exports G-code. Built on SOLID
